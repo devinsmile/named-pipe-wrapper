@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using NamedPipeWrapper.IO;
 using NamedPipeWrapper.Threading;
+using System.Security.Principal;
 using System.Threading;
 using System.IO;
 
@@ -20,9 +21,20 @@ namespace NamedPipeWrapper
         /// Constructs a new <c>NamedPipeServer</c> object that listens for client connections on the given <paramref name="pipeName"/>.
         /// </summary>
         /// <param name="pipeName">Name of the pipe to listen on</param>
-        public NamedPipeServer(string pipeName) : base(pipeName)
+        public NamedPipeServer(string pipeName) 
+                  : base(pipeName)
         {
         }
+
+		/// <summary>
+		/// Constructs a new <c>NamedPipeServer</c> object that listens for client connections on the given <paramref name="pipeName"/>.
+		/// </summary>
+		/// <param name="pipeName">Name of the pipe to listen on</param>
+		/// <param name="bufferSize">Size of input and output buffer</param>
+		/// <param name="security">And object that determine the access control and audit security for the pipe</param>
+		public NamedPipeServer(string pipeName, int bufferSize, PipeSecurity security)
+			: base(pipeName, bufferSize, security)
+		{ }
     }
 
     /// <summary>
@@ -55,12 +67,18 @@ namespace NamedPipeWrapper
         public event PipeExceptionEventHandler Error;
 
         private readonly string _pipeName;
+		private readonly int _bufferSize;
+		private readonly PipeSecurity _security;
         private readonly List<NamedPipeConnection<TRead, TWrite>> _connections = new List<NamedPipeConnection<TRead, TWrite>>();
 
         private int _nextPipeId;
 
         private volatile bool _shouldKeepRunning;
         private volatile bool _isRunning;
+
+        private volatile Mutex _pipelineMutex;
+
+        private object _startSyncRoot = new object();
 
         /// <summary>
         /// The name of the pipeline.
@@ -76,9 +94,19 @@ namespace NamedPipeWrapper
             _pipeName = pipeName;
         }
 
-        private volatile Mutex _pipelineMutex;
+		/// <summary>
+		/// Constructs a new <c>NamedPipeServer</c> object that listens for client connections on the given <paramref name="pipeName"/>.
+		/// </summary>
+		/// <param name="pipeName">Name of the pipe to listen on</param>
+		/// <param name="bufferSize">Size of input and output buffer</param>
+		/// <param name="security">And object that determine the access control and audit security for the pipe</param>
+		public Server(string pipeName, int bufferSize, PipeSecurity security)
+		{
+			_pipeName = pipeName;
+			_bufferSize = bufferSize;
+			_security = security;
+		}
 
-        private object _startSyncRoot = new object();
         /// <summary>
         /// Begins listening for client connections in a separate background thread.
         /// This method returns immediately.
@@ -124,6 +152,102 @@ namespace NamedPipeWrapper
             }
         }
 
+		/// <summary>
+		/// Sends a message to a specific client asynchronously.
+		/// This method returns immediately, possibly before the message has been sent to all clients.
+		/// </summary>
+		/// <param name="message"></param>
+		/// <param name="targetId">Specific client ID to send to.</param>
+		public void PushMessage(TWrite message, int targetId)
+		{
+			lock (_connections)
+			{
+				// Can we speed this up with Linq or does that add overhead?
+				foreach (var client in _connections)
+				{
+					if (client.Id == targetId)
+					{
+						client.PushMessage(message);
+						break;
+					}
+				}
+			}
+		}
+
+		/// <summary>
+		/// Sends a message to a specific clients asynchronously.
+		/// This method returns immediately, possibly before the message has been sent to all clients.
+		/// </summary>
+		/// <param name="message"></param>
+		/// <param name="targetIds">A list of client ID's to send to.</param>
+		public void PushMessage(TWrite message, List<int> targetIds)
+		{
+			lock (_connections)
+			{
+				// Can we speed this up with Linq or does that add overhead?
+				foreach (var client in _connections)
+				{
+					if (targetIds.Contains(client.Id))
+					{
+						client.PushMessage(message);
+					}
+				}
+			}
+		}
+
+
+		/// <summary>
+		/// Sends a message to a specific clients asynchronously.
+		/// This method returns immediately, possibly before the message has been sent to all clients.
+		/// </summary>
+		/// <param name="message"></param>
+		/// <param name="targetIds">An array of client ID's to send to.</param>
+		public void PushMessage(TWrite message, int[] targetIds)
+		{
+			PushMessage(message, targetIds.ToList());
+		}
+
+		/// <summary>
+		/// Sends a message to a specific client asynchronously.
+		/// This method returns immediately, possibly before the message has been sent to all clients.
+		/// </summary>
+		/// <param name="message"></param>
+		/// <param name="targetName">Specific client name to send to.</param>
+		public void PushMessage(TWrite message, string targetName)
+		{
+			lock (_connections)
+			{
+				// Can we speed this up with Linq or does that add overhead?
+				foreach (var client in _connections)
+				{
+					if (client.Name.Equals(targetName))
+					{
+						client.PushMessage(message);
+						break;
+					}
+				}
+			}
+		}
+		/// <summary>
+		/// Sends a message to a specific client asynchronously.
+		/// This method returns immediately, possibly before the message has been sent to all clients.
+		/// </summary>
+		/// <param name="message"></param>
+		/// <param name="targetNames">A list of client names to send to.</param>
+		public void PushMessage(TWrite message, List<string> targetNames)
+		{
+			lock (_connections)
+			{
+				foreach (var client in _connections)
+				{
+					if (targetNames.Contains(client.Name))
+					{
+						client.PushMessage(message);
+					}
+				}
+			}
+		}
+
         /// <summary>
         /// Closes all open client connections and stops listening for new ones.
         /// </summary>
@@ -162,30 +286,30 @@ namespace NamedPipeWrapper
             _isRunning = true;
             while (_shouldKeepRunning)
             {
-                WaitForConnection(_pipeName);
+                WaitForConnection();
             }
             _isRunning = false;
         }
 
-        private void WaitForConnection(string pipeName)
+        private void WaitForConnection()
         {
             NamedPipeServerStream handshakePipe = null;
             NamedPipeServerStream dataPipe = null;
             NamedPipeConnection<TRead, TWrite> connection = null;
 
-            var connectionPipeName = GetNextConnectionPipeName(pipeName);
+            var connectionPipeName = GetNextConnectionPipeName();
 
             try
             {
                 // Send the client the name of the data pipe to use
-                handshakePipe = PipeServerFactory.CreateAndConnectPipe(_pipeName);
+                handshakePipe = CreateAndConnectPipe();
                 var handshakeWrapper = new PipeStreamWrapper<string, string>(handshakePipe);
                 handshakeWrapper.WriteObject(connectionPipeName);
                 handshakeWrapper.WaitForPipeDrain();
                 handshakeWrapper.Close();
 
                 // Wait for the client to connect to the data pipe
-                dataPipe = PipeServerFactory.CreatePipe(connectionPipeName);
+                dataPipe = CreatePipe(connectionPipeName);
                 dataPipe.WaitForConnection();
 
                 // Add the client's connection to the list of connections
@@ -213,6 +337,20 @@ namespace NamedPipeWrapper
                 ClientOnDisconnected(connection);
             }
         }
+
+		private NamedPipeServerStream CreateAndConnectPipe()
+		{
+			return _security == null
+				? PipeServerFactory.CreateAndConnectPipe(_pipeName)
+				: PipeServerFactory.CreateAndConnectPipe(_pipeName, _bufferSize, _security);
+		}
+
+		private NamedPipeServerStream CreatePipe(string connectionPipeName)
+		{
+			return _security == null
+				? PipeServerFactory.CreatePipe(connectionPipeName)
+				: PipeServerFactory.CreatePipe(connectionPipeName, _bufferSize, _security);
+		}
 
         private void ClientOnConnected(NamedPipeConnection<TRead, TWrite> connection)
         {
@@ -258,9 +396,9 @@ namespace NamedPipeWrapper
                 Error(exception);
         }
 
-        private string GetNextConnectionPipeName(string pipeName)
+        private string GetNextConnectionPipeName()
         {
-            return string.Format("{0}_{1}", pipeName, ++_nextPipeId);
+            return string.Format("{0}_{1}", _pipeName, ++_nextPipeId);
         }
 
         private static void Cleanup(NamedPipeServerStream pipe)
@@ -307,20 +445,5 @@ namespace NamedPipeWrapper
         #endregion
 
         #endregion
-    }
-
-    static class PipeServerFactory
-    {
-        public static NamedPipeServerStream CreateAndConnectPipe(string pipeName)
-        {
-            var pipe = CreatePipe(pipeName);
-            pipe.WaitForConnection();
-            return pipe;
-        }
-
-        public static NamedPipeServerStream CreatePipe(string pipeName)
-        {
-            return new NamedPipeServerStream(pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.WriteThrough);
-        }
     }
 }
