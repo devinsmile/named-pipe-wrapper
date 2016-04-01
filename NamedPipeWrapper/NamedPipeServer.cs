@@ -30,7 +30,7 @@ namespace NamedPipeWrapper
     /// </summary>
     /// <typeparam name="TRead">Reference type to read from the named pipe</typeparam>
     /// <typeparam name="TWrite">Reference type to write to the named pipe</typeparam>
-    public class Server<TRead, TWrite>
+    public class Server<TRead, TWrite> : IDisposable
         where TRead : class
         where TWrite : class
     {
@@ -271,6 +271,39 @@ namespace NamedPipeWrapper
                 x.Close();
             }
         }
+
+        #region IDisposable Support
+        private bool disposedValue = false; // 要检测冗余调用
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!disposedValue)
+            {
+                if (disposing)
+                {
+                }
+
+                _pipelineMutex.Close();
+                _pipelineMutex = null;
+
+                disposedValue = true;
+            }
+        }
+
+        ~Server()
+        {
+            // 请勿更改此代码。将清理代码放入以上 Dispose(bool disposing) 中。
+            Dispose(false);
+        }
+
+        // 添加此代码以正确实现可处置模式。
+        void IDisposable.Dispose()
+        {
+            // 请勿更改此代码。将清理代码放入以上 Dispose(bool disposing) 中。
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
+        #endregion
 
         #endregion
     }
