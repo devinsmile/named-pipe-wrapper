@@ -281,6 +281,7 @@ namespace NamedPipeWrapper
             {
                 if (disposing)
                 {
+                    Stop();
                 }
 
                 _pipelineMutex.Close();
