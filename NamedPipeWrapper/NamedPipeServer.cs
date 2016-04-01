@@ -5,6 +5,8 @@ using System.Linq;
 using System.Text;
 using NamedPipeWrapper.IO;
 using NamedPipeWrapper.Threading;
+using System.Threading;
+using System.IO;
 
 namespace NamedPipeWrapper
 {
@@ -61,6 +63,11 @@ namespace NamedPipeWrapper
         private volatile bool _isRunning;
 
         /// <summary>
+        /// The name of the pipeline.
+        /// </summary>
+        public string PipeName { get { return _pipeName; } }
+
+        /// <summary>
         /// Constructs a new <c>NamedPipeServer</c> object that listens for client connections on the given <paramref name="pipeName"/>.
         /// </summary>
         /// <param name="pipeName">Name of the pipe to listen on</param>
@@ -69,16 +76,36 @@ namespace NamedPipeWrapper
             _pipeName = pipeName;
         }
 
+        private volatile Mutex _pipelineMutex;
+
+        private object _startSyncRoot = new object();
         /// <summary>
         /// Begins listening for client connections in a separate background thread.
         /// This method returns immediately.
         /// </summary>
-        public void Start()
+        /// <returns>true:The server starts successfully. false:There is already a server with the same pipe name started.</returns>
+        public bool Start()
         {
-            _shouldKeepRunning = true;
-            var worker = new Worker();
-            worker.Error += OnError;
-            worker.DoWork(ListenSync);
+            lock(_startSyncRoot)
+            {
+                if(_pipelineMutex != null)
+                {
+                    return false;
+                }
+                bool createdNewPipelineMutex;
+                _pipelineMutex = new Mutex(true, _pipeName + "_Mutex", out createdNewPipelineMutex);
+                if (!createdNewPipelineMutex)
+                {
+                    _pipelineMutex.Close();
+                    _pipelineMutex = null;
+                    return false;
+                }
+                _shouldKeepRunning = true;
+                var worker = new Worker();
+                worker.Error += OnError;
+                worker.DoWork(ListenSync);
+                return true;
+            }
         }
 
         /// <summary>
@@ -102,6 +129,13 @@ namespace NamedPipeWrapper
         /// </summary>
         public void Stop()
         {
+            _pipelineMutex?.Close();
+            _pipelineMutex = null;
+
+            if (!_isRunning)
+            {
+                return;
+            }
             _shouldKeepRunning = false;
 
             lock (_connections)
@@ -144,7 +178,7 @@ namespace NamedPipeWrapper
             try
             {
                 // Send the client the name of the data pipe to use
-                handshakePipe = PipeServerFactory.CreateAndConnectPipe(pipeName);
+                handshakePipe = PipeServerFactory.CreateAndConnectPipe(_pipeName);
                 var handshakeWrapper = new PipeStreamWrapper<string, string>(handshakePipe);
                 handshakeWrapper.WriteObject(connectionPipeName);
                 handshakeWrapper.WaitForPipeDrain();
