@@ -21,20 +21,20 @@ namespace NamedPipeWrapper
         /// Constructs a new <c>NamedPipeServer</c> object that listens for client connections on the given <paramref name="pipeName"/>.
         /// </summary>
         /// <param name="pipeName">Name of the pipe to listen on</param>
-        public NamedPipeServer(string pipeName) 
+        public NamedPipeServer(string pipeName)
                   : base(pipeName)
         {
         }
 
-		/// <summary>
-		/// Constructs a new <c>NamedPipeServer</c> object that listens for client connections on the given <paramref name="pipeName"/>.
-		/// </summary>
-		/// <param name="pipeName">Name of the pipe to listen on</param>
-		/// <param name="bufferSize">Size of input and output buffer</param>
-		/// <param name="security">And object that determine the access control and audit security for the pipe</param>
-		public NamedPipeServer(string pipeName, int bufferSize, PipeSecurity security)
-			: base(pipeName, bufferSize, security)
-		{ }
+        /// <summary>
+        /// Constructs a new <c>NamedPipeServer</c> object that listens for client connections on the given <paramref name="pipeName"/>.
+        /// </summary>
+        /// <param name="pipeName">Name of the pipe to listen on</param>
+        /// <param name="bufferSize">Size of input and output buffer</param>
+        /// <param name="security">And object that determine the access control and audit security for the pipe</param>
+        public NamedPipeServer(string pipeName, int bufferSize, PipeSecurity security)
+            : base(pipeName, bufferSize, security)
+        { }
     }
 
     /// <summary>
@@ -67,8 +67,8 @@ namespace NamedPipeWrapper
         public event PipeExceptionEventHandler Error;
 
         private readonly string _pipeName;
-		private readonly int _bufferSize;
-		private readonly PipeSecurity _security;
+        private readonly int _bufferSize;
+        private readonly PipeSecurity _security;
         private readonly List<NamedPipeConnection<TRead, TWrite>> _connections = new List<NamedPipeConnection<TRead, TWrite>>();
 
         private int _nextPipeId;
@@ -94,18 +94,18 @@ namespace NamedPipeWrapper
             _pipeName = pipeName;
         }
 
-		/// <summary>
-		/// Constructs a new <c>NamedPipeServer</c> object that listens for client connections on the given <paramref name="pipeName"/>.
-		/// </summary>
-		/// <param name="pipeName">Name of the pipe to listen on</param>
-		/// <param name="bufferSize">Size of input and output buffer</param>
-		/// <param name="security">And object that determine the access control and audit security for the pipe</param>
-		public Server(string pipeName, int bufferSize, PipeSecurity security)
-		{
-			_pipeName = pipeName;
-			_bufferSize = bufferSize;
-			_security = security;
-		}
+        /// <summary>
+        /// Constructs a new <c>NamedPipeServer</c> object that listens for client connections on the given <paramref name="pipeName"/>.
+        /// </summary>
+        /// <param name="pipeName">Name of the pipe to listen on</param>
+        /// <param name="bufferSize">Size of input and output buffer</param>
+        /// <param name="security">And object that determine the access control and audit security for the pipe</param>
+        public Server(string pipeName, int bufferSize, PipeSecurity security)
+        {
+            _pipeName = pipeName;
+            _bufferSize = bufferSize;
+            _security = security;
+        }
 
         /// <summary>
         /// Begins listening for client connections in a separate background thread.
@@ -114,9 +114,9 @@ namespace NamedPipeWrapper
         /// <returns>true:The server starts successfully. false:There is already a server with the same pipe name started.</returns>
         public bool Start()
         {
-            lock(_startSyncRoot)
+            lock (_startSyncRoot)
             {
-                if(_pipelineMutex != null)
+                if (_pipelineMutex != null)
                 {
                     return false;
                 }
@@ -152,101 +152,101 @@ namespace NamedPipeWrapper
             }
         }
 
-		/// <summary>
-		/// Sends a message to a specific client asynchronously.
-		/// This method returns immediately, possibly before the message has been sent to all clients.
-		/// </summary>
-		/// <param name="message"></param>
-		/// <param name="targetId">Specific client ID to send to.</param>
-		public void PushMessage(TWrite message, int targetId)
-		{
-			lock (_connections)
-			{
-				// Can we speed this up with Linq or does that add overhead?
-				foreach (var client in _connections)
-				{
-					if (client.Id == targetId)
-					{
-						client.PushMessage(message);
-						break;
-					}
-				}
-			}
-		}
+        /// <summary>
+        /// Sends a message to a specific client asynchronously.
+        /// This method returns immediately, possibly before the message has been sent to all clients.
+        /// </summary>
+        /// <param name="message"></param>
+        /// <param name="targetId">Specific client ID to send to.</param>
+        public void PushMessage(TWrite message, int targetId)
+        {
+            lock (_connections)
+            {
+                // Can we speed this up with Linq or does that add overhead?
+                foreach (var client in _connections)
+                {
+                    if (client.Id == targetId)
+                    {
+                        client.PushMessage(message);
+                        break;
+                    }
+                }
+            }
+        }
 
-		/// <summary>
-		/// Sends a message to a specific clients asynchronously.
-		/// This method returns immediately, possibly before the message has been sent to all clients.
-		/// </summary>
-		/// <param name="message"></param>
-		/// <param name="targetIds">A list of client ID's to send to.</param>
-		public void PushMessage(TWrite message, List<int> targetIds)
-		{
-			lock (_connections)
-			{
-				// Can we speed this up with Linq or does that add overhead?
-				foreach (var client in _connections)
-				{
-					if (targetIds.Contains(client.Id))
-					{
-						client.PushMessage(message);
-					}
-				}
-			}
-		}
+        /// <summary>
+        /// Sends a message to a specific clients asynchronously.
+        /// This method returns immediately, possibly before the message has been sent to all clients.
+        /// </summary>
+        /// <param name="message"></param>
+        /// <param name="targetIds">A list of client ID's to send to.</param>
+        public void PushMessage(TWrite message, List<int> targetIds)
+        {
+            lock (_connections)
+            {
+                // Can we speed this up with Linq or does that add overhead?
+                foreach (var client in _connections)
+                {
+                    if (targetIds.Contains(client.Id))
+                    {
+                        client.PushMessage(message);
+                    }
+                }
+            }
+        }
 
 
-		/// <summary>
-		/// Sends a message to a specific clients asynchronously.
-		/// This method returns immediately, possibly before the message has been sent to all clients.
-		/// </summary>
-		/// <param name="message"></param>
-		/// <param name="targetIds">An array of client ID's to send to.</param>
-		public void PushMessage(TWrite message, int[] targetIds)
-		{
-			PushMessage(message, targetIds.ToList());
-		}
+        /// <summary>
+        /// Sends a message to a specific clients asynchronously.
+        /// This method returns immediately, possibly before the message has been sent to all clients.
+        /// </summary>
+        /// <param name="message"></param>
+        /// <param name="targetIds">An array of client ID's to send to.</param>
+        public void PushMessage(TWrite message, int[] targetIds)
+        {
+            PushMessage(message, targetIds.ToList());
+        }
 
-		/// <summary>
-		/// Sends a message to a specific client asynchronously.
-		/// This method returns immediately, possibly before the message has been sent to all clients.
-		/// </summary>
-		/// <param name="message"></param>
-		/// <param name="targetName">Specific client name to send to.</param>
-		public void PushMessage(TWrite message, string targetName)
-		{
-			lock (_connections)
-			{
-				// Can we speed this up with Linq or does that add overhead?
-				foreach (var client in _connections)
-				{
-					if (client.Name.Equals(targetName))
-					{
-						client.PushMessage(message);
-						break;
-					}
-				}
-			}
-		}
-		/// <summary>
-		/// Sends a message to a specific client asynchronously.
-		/// This method returns immediately, possibly before the message has been sent to all clients.
-		/// </summary>
-		/// <param name="message"></param>
-		/// <param name="targetNames">A list of client names to send to.</param>
-		public void PushMessage(TWrite message, List<string> targetNames)
-		{
-			lock (_connections)
-			{
-				foreach (var client in _connections)
-				{
-					if (targetNames.Contains(client.Name))
-					{
-						client.PushMessage(message);
-					}
-				}
-			}
-		}
+        /// <summary>
+        /// Sends a message to a specific client asynchronously.
+        /// This method returns immediately, possibly before the message has been sent to all clients.
+        /// </summary>
+        /// <param name="message"></param>
+        /// <param name="targetName">Specific client name to send to.</param>
+        public void PushMessage(TWrite message, string targetName)
+        {
+            lock (_connections)
+            {
+                // Can we speed this up with Linq or does that add overhead?
+                foreach (var client in _connections)
+                {
+                    if (client.Name.Equals(targetName))
+                    {
+                        client.PushMessage(message);
+                        break;
+                    }
+                }
+            }
+        }
+        /// <summary>
+        /// Sends a message to a specific client asynchronously.
+        /// This method returns immediately, possibly before the message has been sent to all clients.
+        /// </summary>
+        /// <param name="message"></param>
+        /// <param name="targetNames">A list of client names to send to.</param>
+        public void PushMessage(TWrite message, List<string> targetNames)
+        {
+            lock (_connections)
+            {
+                foreach (var client in _connections)
+                {
+                    if (targetNames.Contains(client.Name))
+                    {
+                        client.PushMessage(message);
+                    }
+                }
+            }
+        }
 
         /// <summary>
         /// Closes all open client connections and stops listening for new ones.
@@ -338,19 +338,19 @@ namespace NamedPipeWrapper
             }
         }
 
-		private NamedPipeServerStream CreateAndConnectPipe()
-		{
-			return _security == null
-				? PipeServerFactory.CreateAndConnectPipe(_pipeName)
-				: PipeServerFactory.CreateAndConnectPipe(_pipeName, _bufferSize, _security);
-		}
+        private NamedPipeServerStream CreateAndConnectPipe()
+        {
+            return _security == null
+                ? PipeServerFactory.CreateAndConnectPipe(_pipeName)
+                : PipeServerFactory.CreateAndConnectPipe(_pipeName, _bufferSize, _security);
+        }
 
-		private NamedPipeServerStream CreatePipe(string connectionPipeName)
-		{
-			return _security == null
-				? PipeServerFactory.CreatePipe(connectionPipeName)
-				: PipeServerFactory.CreatePipe(connectionPipeName, _bufferSize, _security);
-		}
+        private NamedPipeServerStream CreatePipe(string connectionPipeName)
+        {
+            return _security == null
+                ? PipeServerFactory.CreatePipe(connectionPipeName)
+                : PipeServerFactory.CreatePipe(connectionPipeName, _bufferSize, _security);
+        }
 
         private void ClientOnConnected(NamedPipeConnection<TRead, TWrite> connection)
         {
