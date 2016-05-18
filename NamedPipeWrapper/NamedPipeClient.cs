@@ -212,6 +212,16 @@ namespace NamedPipeWrapper
                 Error(exception);
         }
 
+        public bool IsConnected()
+        {
+            if (_connection != null)
+            {
+                return _connection.IsConnected;
+            }
+
+            return false;
+        }
+        
         #endregion
     }
 
